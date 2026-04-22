@@ -17,7 +17,7 @@
       "bundleIdentifier": "com.gifmeapp.ios",
       "infoPlist": {
         "NSCameraUsageDescription": "GifMe needs camera access so you can snap a selfie to turn into GIFs.",
-        "NSPhotoLibraryUsageDescription": "GifMe saves your generated GIFs to your photo library.",
+        "NSPhotoLibraryUsageDescription": "GifMe reads photos from your library so you can pick a selfie to turn into GIFs, and saves generated GIFs back to your library.",
         "NSPhotoLibraryAddUsageDescription": "GifMe saves your generated GIFs to your photo library."
       }
     },
@@ -49,6 +49,12 @@
           "photosPermission": "Allow GifMe to save GIFs to your photo library.",
           "savePhotosPermission": "Allow GifMe to save GIFs to your photo library.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GifMe to pick a selfie from your photo library."
         }
       ]
     ]

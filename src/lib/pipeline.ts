@@ -17,7 +17,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import jpeg from "jpeg-js";
 
 import { decodeGif, encodeGif, type RGBAFrame } from "./gif";
-import { faceSwap } from "./replicate";
+import { callFaceSwap } from "./firebase";
 import { fileToDataUrl } from "./base64";
 
 export type PipelineProgress = {
@@ -161,7 +161,10 @@ export async function swapFacesInGif(
     frames,
     async (frame) => {
       const frameJpeg = rgbaToJpegDataUrl(frame, 80);
-      const resultUrl = await faceSwap(frameJpeg, selfieDataUrl);
+      const resultUrl = await callFaceSwap({
+        inputImage: frameJpeg,
+        swapImage: selfieDataUrl,
+      });
       const newRgba = await dataUrlToRgba(resultUrl, frame.width, frame.height);
       swapped++;
       progress({ phase: "swap", done: swapped, total: frames.length });
