@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0f"
       },
-      "package": "com.gifmeapp.ios",
+      "package": "com.gifmeapp.android",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
