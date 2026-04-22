@@ -1,0 +1,22 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+
+# Env / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Native build artifacts (we use EAS, not local prebuild)
+ios/
+android/
+
+# Editor
+.vscode/
+.idea/

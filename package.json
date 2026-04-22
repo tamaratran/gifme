@@ -1,0 +1,35 @@
+{
+  "name": "gifme",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "expo": "~54.0.33",
+    "expo-camera": "~17.0.8",
+    "expo-file-system": "~19.0.17",
+    "expo-image": "~3.0.11",
+    "expo-image-manipulator": "~14.0.7",
+    "expo-media-library": "~18.2.0",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "gifenc": "^1.0.3",
+    "jpeg-js": "^0.4.4",
+    "omggif": "^1.0.10",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0"
+  },
+  "devDependencies": {
+    "@types/omggif": "^1.0.5",
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

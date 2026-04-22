@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "GifMe",
+    "slug": "gifme",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0f"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gifme.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GifMe needs camera access so you can snap a selfie to turn into GIFs.",
+        "NSPhotoLibraryUsageDescription": "GifMe saves your generated GIFs to your photo library.",
+        "NSPhotoLibraryAddUsageDescription": "GifMe saves your generated GIFs to your photo library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0f"
+      },
+      "package": "com.gifme.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow GifMe to use your camera to take selfies."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow GifMe to save GIFs to your photo library.",
+          "savePhotosPermission": "Allow GifMe to save GIFs to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ]
+  }
+}
