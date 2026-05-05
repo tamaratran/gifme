@@ -102,7 +102,14 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     };
 
     const drain = () => {
-      while (inFlight < MAX_CONCURRENT_JOBS && queueIdx < templates.length) {
+      // Bail if the screen has been unmounted — fal.ai requests are billed per
+      // clip ($0.20 each), so we must not start new ones after the user
+      // navigates away.
+      while (
+        !cancelled &&
+        inFlight < MAX_CONCURRENT_JOBS &&
+        queueIdx < templates.length
+      ) {
         runOne(queueIdx++);
       }
     };
