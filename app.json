@@ -63,7 +63,8 @@
         {
           "photosPermission": "Allow GifMe to pick a selfie from your photo library."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {

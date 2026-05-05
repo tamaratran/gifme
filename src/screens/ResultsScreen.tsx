@@ -9,12 +9,13 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import { VideoView, useVideoPlayer } from "expo-video";
 import * as MediaLibrary from "expo-media-library";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radii, spacing, type as t } from "../theme";
 import { type MemeTemplate } from "../lib/templates";
-import { swapFacesInGif } from "../lib/pipeline";
+import { generateMemeVideo, type PipelineProgress } from "../lib/pipeline";
 
 type Status =
   | { kind: "pending" }
@@ -33,6 +34,18 @@ type Props = {
   onBack: () => void;
 };
 
+const PHASE_LABEL: Record<PipelineProgress["phase"], string> = {
+  encode: "Preparing selfie",
+  generate: "Generating video",
+  download: "Downloading",
+  save: "Saving",
+};
+
+// fal.ai Pika v2.2 charges per request; cap concurrent jobs so we never
+// fan out 10 simultaneous requests (which would also overwhelm the function
+// instance pool). 3 in flight at once balances throughput and cost.
+const MAX_CONCURRENT_JOBS = 3;
+
 export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
   const [rows, setRows] = useState<Row[]>(
     templates.map((template) => ({ template, status: { kind: "pending" } }))
@@ -44,41 +57,67 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    // Run all face swaps in parallel. Each template's frame-level concurrency
-    // is already capped inside swapFacesInGif, so we don't need extra gating.
-    templates.forEach((template, idx) => {
-      const update = (patch: Status) =>
-        setRows((prev) =>
-          prev.map((r, i) => (i === idx ? { ...r, status: patch } : r))
-        );
+    let queueIdx = 0;
+    let inFlight = 0;
+    let cancelled = false;
 
-      update({ kind: "running", message: "Starting…", progress: 0 });
+    const update = (idx: number, patch: Status) =>
+      setRows((prev) =>
+        prev.map((r, i) => (i === idx ? { ...r, status: patch } : r))
+      );
 
-      swapFacesInGif(template.gifUrl, selfieUri, `gifme-${template.id}.gif`, {
-        concurrency: 4,
-        onProgress: (p) => {
-          const phaseLabel = {
-            fetch: "Downloading template",
-            decode: "Reading frames",
-            swap: `Swapping faces ${p.done}/${p.total}`,
-            encode: "Rendering GIF",
-            save: "Saving",
-          }[p.phase];
-          const ratio = p.total === 0 ? 0 : p.done / p.total;
-          update({ kind: "running", message: phaseLabel, progress: ratio });
-        },
-      })
-        .then((uri) => update({ kind: "done", uri }))
+    const runOne = (idx: number) => {
+      const template = templates[idx];
+      if (!template) return;
+      inFlight++;
+      update(idx, { kind: "running", message: "Starting…", progress: 0 });
+
+      generateMemeVideo(
+        selfieUri,
+        template.prompt,
+        template.duration,
+        `gifme-${template.id}.mp4`,
+        {
+          onProgress: (p) => {
+            const ratio = p.total === 0 ? 0 : p.done / p.total;
+            update(idx, {
+              kind: "running",
+              message: PHASE_LABEL[p.phase],
+              progress: ratio,
+            });
+          },
+        }
+      )
+        .then(({ uri }) => {
+          if (!cancelled) update(idx, { kind: "done", uri });
+        })
         .catch((e: unknown) => {
           const message = e instanceof Error ? e.message : String(e);
-          update({ kind: "error", message });
+          if (!cancelled) update(idx, { kind: "error", message });
+        })
+        .finally(() => {
+          inFlight--;
+          drain();
         });
-    });
+    };
+
+    const drain = () => {
+      while (inFlight < MAX_CONCURRENT_JOBS && queueIdx < templates.length) {
+        runOne(queueIdx++);
+      }
+    };
+
+    drain();
+
+    return () => {
+      cancelled = true;
+    };
   }, [templates, selfieUri]);
 
   async function saveAll() {
-    const ready = rows.filter((r): r is Row & { status: { kind: "done"; uri: string } } =>
-      r.status.kind === "done"
+    const ready = rows.filter(
+      (r): r is Row & { status: { kind: "done"; uri: string } } =>
+        r.status.kind === "done"
     );
     if (ready.length === 0) return;
 
@@ -86,7 +125,7 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     if (!perm.granted) {
       Alert.alert(
         "Photo library access needed",
-        "Enable access in Settings so GifMe can save your GIFs."
+        "Enable access in Settings so GifMe can save your videos."
       );
       return;
     }
@@ -96,7 +135,10 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
       for (const r of ready) {
         await MediaLibrary.saveToLibraryAsync(r.status.uri);
       }
-      Alert.alert("Saved", `${ready.length} GIF${ready.length === 1 ? "" : "s"} saved to Photos.`);
+      Alert.alert(
+        "Saved",
+        `${ready.length} video${ready.length === 1 ? "" : "s"} saved to Photos.`
+      );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       Alert.alert("Couldn't save", message);
@@ -139,7 +181,9 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
           ]}
         >
           <Text style={styles.ctaText}>
-            {savingAll ? "Saving…" : `Save ${doneCount} GIF${doneCount === 1 ? "" : "s"} to Photos`}
+            {savingAll
+              ? "Saving…"
+              : `Save ${doneCount} video${doneCount === 1 ? "" : "s"} to Photos`}
           </Text>
         </Pressable>
       </View>
@@ -149,19 +193,26 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
 
 function ResultCell({ row }: { row: Row }) {
   const { template, status } = row;
+  const videoUri = status.kind === "done" ? status.uri : null;
+  const player = useVideoPlayer(videoUri, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
 
   return (
     <View style={styles.cell}>
       <View style={styles.cellImageWrap}>
         {status.kind === "done" ? (
-          <Image
-            source={{ uri: status.uri }}
+          <VideoView
+            player={player}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            nativeControls={false}
           />
         ) : (
           <Image
-            source={{ uri: template.gifUrl }}
+            source={{ uri: template.thumbnailUrl }}
             style={[StyleSheet.absoluteFill, { opacity: 0.35 }]}
             contentFit="cover"
           />
@@ -174,12 +225,23 @@ function ResultCell({ row }: { row: Row }) {
         )}
         {status.kind === "error" && (
           <View style={styles.overlay}>
-            <Text style={[styles.overlayText, { color: colors.danger }]}>Failed</Text>
+            <Text style={[styles.overlayText, { color: colors.danger }]}>
+              Failed
+            </Text>
+            <Text
+              style={[styles.overlayText, styles.errorDetail]}
+              numberOfLines={3}
+            >
+              {status.message}
+            </Text>
           </View>
         )}
       </View>
       <Text style={styles.cellTitle} numberOfLines={1}>
         {template.title}
+      </Text>
+      <Text style={styles.cellCaption} numberOfLines={1}>
+        {template.caption}
       </Text>
     </View>
   );
@@ -196,7 +258,7 @@ const styles = StyleSheet.create({
   back: { ...t.body, color: colors.accent },
   title: { ...t.title, color: colors.text },
   grid: { padding: spacing.lg, paddingBottom: 160, gap: spacing.md },
-  cell: { flex: 1, gap: spacing.sm, marginBottom: spacing.md },
+  cell: { flex: 1, gap: spacing.xs, marginBottom: spacing.md },
   cellImageWrap: {
     width: "100%",
     aspectRatio: 1,
@@ -213,7 +275,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   overlayText: { ...t.caption, color: colors.text, textAlign: "center" },
-  cellTitle: { ...t.caption, color: colors.textMuted },
+  errorDetail: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  cellTitle: { ...t.body, color: colors.text },
+  cellCaption: { ...t.caption, color: colors.textMuted },
   footer: {
     position: "absolute",
     left: 0,

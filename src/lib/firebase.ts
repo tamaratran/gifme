@@ -35,19 +35,31 @@ export function getFirebaseApp(): FirebaseApp {
 
 export function getFirebaseFunctions(): Functions {
   if (functions) return functions;
+  // fal.ai i2v jobs typically take 30-90s; bump the client timeout to 4 min
+  // so the callable doesn't abort before the function returns. Functions-side
+  // timeoutSeconds is set to 300 in functions/src/index.ts.
   functions = getFunctions(getFirebaseApp(), "us-central1");
   return functions;
 }
 
-/** Typed wrapper around the `faceSwap` HTTPS callable. */
-export async function callFaceSwap(input: {
-  inputImage: string;
-  swapImage: string;
-}): Promise<string> {
+/** Typed wrapper around the `generateMemeVideo` HTTPS callable. */
+export async function callGenerateMemeVideo(input: {
+  selfieDataUrl: string;
+  prompt: string;
+  duration?: number;
+  model?: string;
+}): Promise<{ url: string; contentType: string; model: string }> {
   const fn = httpsCallable<
-    { inputImage: string; swapImage: string },
-    { url: string }
-  >(getFirebaseFunctions(), "faceSwap");
+    {
+      selfieDataUrl: string;
+      prompt: string;
+      duration?: number;
+      model?: string;
+    },
+    { url: string; contentType: string; model: string }
+  >(getFirebaseFunctions(), "generateMemeVideo", {
+    timeout: 240_000,
+  });
   const res = await fn(input);
-  return res.data.url;
+  return res.data;
 }

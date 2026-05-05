@@ -1,10 +1,10 @@
 /**
- * GifMe AI — face-swap proxy.
+ * GifMe AI — image-to-video proxy.
  *
- * The mobile client sends a meme frame + selfie to this function; the function
- * forwards both to Replicate's cdingram/face-swap model using a server-side
- * token, polls until the prediction finishes, and returns the swapped image
- * URL. Token stays on the server so it never ships in the app bundle.
+ * The mobile client sends a selfie + text prompt to this function; the
+ * function forwards both to fal.ai's image-to-video endpoint (Pika v2.2 by
+ * default), waits for the job to finish, and returns the generated video URL.
+ * The fal.ai key stays on the server so it never ships in the app bundle.
  *
  * App Check is enforced in production — attach a Firebase App Check token on
  * the client (App Attest on iOS, Play Integrity on Android) before calling.
@@ -12,124 +12,97 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { setGlobalOptions } from "firebase-functions/v2";
+import { fal } from "@fal-ai/client";
 
-// Replicate API token, stored in Google Secret Manager.
-// Set once via: firebase functions:secrets:set REPLICATE_API_TOKEN
-const REPLICATE_API_TOKEN = defineSecret("REPLICATE_API_TOKEN");
+// fal.ai API key, stored in Google Secret Manager.
+// Set once via: firebase functions:secrets:set FAL_KEY
+const FAL_KEY = defineSecret("FAL_KEY");
 
 setGlobalOptions({ region: "us-central1", maxInstances: 20 });
 
-const API_BASE = "https://api.replicate.com/v1";
+// Default model — Pika v2.2 image-to-video at 720p ($0.20 per 5s clip).
+// Overridable per-call via `request.data.model` so we can A/B Kling, Hailuo,
+// Wan, etc. without redeploying.
+const DEFAULT_MODEL = "fal-ai/pika/v2.2/image-to-video";
 
-// cdingram/face-swap — pinned for reproducibility.
-const FACE_SWAP_VERSION =
-  "d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111";
-
-type Prediction = {
-  id: string;
-  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string | string[];
-  error?: string | null;
-  urls: { get: string; cancel: string };
+type FalVideoOutput = {
+  video?: { url: string; content_type?: string };
 };
 
-async function replicateFetch<T>(
-  path: string,
-  token: string,
-  init?: RequestInit & { json?: unknown }
-): Promise<T> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-    ...((init?.headers as Record<string, string>) ?? {}),
-  };
-  const body =
-    init?.json !== undefined ? JSON.stringify(init.json) : init?.body;
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers,
-    body: body as BodyInit | undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new HttpsError(
-      "internal",
-      `Replicate ${res.status}: ${text || res.statusText}`
-    );
-  }
-  return (await res.json()) as T;
-}
-
-export const faceSwap = onCall(
+export const generateMemeVideo = onCall(
   {
     // App Check protects the endpoint from non-legitimate clients.
     // To ease local dev, we allow unauthenticated calls and just require a
     // valid App Check token in production. Flip `enforceAppCheck: true` once
     // the client is attaching tokens.
     enforceAppCheck: false,
-    secrets: [REPLICATE_API_TOKEN],
-    timeoutSeconds: 120,
-    memory: "256MiB",
+    secrets: [FAL_KEY],
+    // fal.ai i2v jobs take 30-90s typically; allow headroom.
+    timeoutSeconds: 300,
+    memory: "512MiB",
   },
-  async (request): Promise<{ url: string }> => {
-    const { inputImage, swapImage } = (request.data ?? {}) as {
-      inputImage?: string;
-      swapImage?: string;
+  async (
+    request
+  ): Promise<{ url: string; contentType: string; model: string }> => {
+    const {
+      selfieDataUrl,
+      prompt,
+      duration,
+      model: modelOverride,
+    } = (request.data ?? {}) as {
+      selfieDataUrl?: string;
+      prompt?: string;
+      duration?: number;
+      model?: string;
     };
 
-    if (typeof inputImage !== "string" || inputImage.length < 10) {
+    if (typeof selfieDataUrl !== "string" || selfieDataUrl.length < 64) {
       throw new HttpsError(
         "invalid-argument",
-        "`inputImage` must be a non-empty data URL or HTTPS URL."
+        "`selfieDataUrl` must be a non-empty data URL or HTTPS URL."
       );
     }
-    if (typeof swapImage !== "string" || swapImage.length < 10) {
+    if (typeof prompt !== "string" || prompt.length === 0) {
       throw new HttpsError(
         "invalid-argument",
-        "`swapImage` must be a non-empty data URL or HTTPS URL."
+        "`prompt` must be a non-empty string."
       );
     }
 
-    const token = REPLICATE_API_TOKEN.value();
+    const model = modelOverride ?? DEFAULT_MODEL;
+    const dur = Number.isFinite(duration) ? Math.round(duration as number) : 5;
 
-    // 1. Create prediction.
-    let pred = await replicateFetch<Prediction>("/predictions", token, {
-      method: "POST",
-      json: {
-        version: FACE_SWAP_VERSION,
-        input: { input_image: inputImage, swap_image: swapImage },
-      },
-    });
+    fal.config({ credentials: FAL_KEY.value() });
 
-    // 2. Poll until done (capped at ~90s; Cloud Functions timeout is 120s).
-    const deadline = Date.now() + 90_000;
-    while (pred.status === "starting" || pred.status === "processing") {
-      if (Date.now() > deadline) {
-        throw new HttpsError(
-          "deadline-exceeded",
-          `Prediction ${pred.id} timed out after 90s`
-        );
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-      pred = await replicateFetch<Prediction>(pred.urls.get, token);
+    let result;
+    try {
+      result = await fal.subscribe(model, {
+        input: {
+          image_url: selfieDataUrl,
+          prompt,
+          duration: dur,
+          resolution: "720p",
+        },
+        logs: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new HttpsError("internal", `fal.ai ${model} failed: ${msg}`);
     }
 
-    if (pred.status !== "succeeded") {
-      throw new HttpsError(
-        "internal",
-        `Prediction ${pred.id} ${pred.status}: ${pred.error ?? "unknown error"}`
-      );
-    }
-
-    const out = pred.output;
-    const url = Array.isArray(out) ? out[0] : out;
+    const data = result.data as FalVideoOutput;
+    const url = data?.video?.url;
     if (typeof url !== "string") {
       throw new HttpsError(
         "internal",
-        `Prediction ${pred.id} returned no output URL`
+        `fal.ai ${model} returned no video URL (got: ${JSON.stringify(data).slice(0, 200)})`
       );
     }
-    return { url };
+
+    return {
+      url,
+      contentType: data.video?.content_type ?? "video/mp4",
+      model,
+    };
   }
 );

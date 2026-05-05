@@ -20,8 +20,8 @@ type Props = {
 };
 
 export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
-  // We face-swap every template at once — the home screen doubles as a
-  // preview of what the user's about to generate.
+  // We generate every template at once — the home screen doubles as a
+  // preview of the vibes the user's about to generate from their selfie.
   const picks = useMemo(() => TEMPLATES, []);
 
   async function pickFromLibrary() {
@@ -47,20 +47,23 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.display}>GifMe AI</Text>
         <Text style={styles.tagline}>
-          Snap a selfie. Get your face on every GIF on the internet.
+          Snap a selfie. AI animates you into 10 reaction memes.
         </Text>
 
         <View style={styles.grid}>
           {picks.map((t) => (
             <View key={t.id} style={styles.cell}>
               <Image
-                source={{ uri: t.previewUrl ?? t.gifUrl }}
+                source={{ uri: t.thumbnailUrl }}
                 style={styles.thumb}
                 contentFit="cover"
                 transition={200}
               />
               <Text style={styles.cellTitle} numberOfLines={1}>
                 {t.title}
+              </Text>
+              <Text style={styles.cellCaption} numberOfLines={1}>
+                {t.caption}
               </Text>
             </View>
           ))}
@@ -115,7 +118,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.card,
   },
-  cellTitle: { ...type.caption, color: colors.textMuted },
+  cellTitle: { ...type.body, color: colors.text },
+  cellCaption: { ...type.caption, color: colors.textMuted },
   footer: {
     position: "absolute",
     bottom: 0,
