@@ -18,11 +18,16 @@ import { TEMPLATES, type MemeTemplate } from "../lib/templates";
 type Props = {
   onStart: (picked: MemeTemplate[]) => void;
   onPickedFromLibrary: (uri: string, picked: MemeTemplate[]) => void;
+  onUploadVideo: () => void;
 };
 
 const MAX_CONTENT_WIDTH = 520;
 
-export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
+export function HomeScreen({
+  onStart,
+  onPickedFromLibrary,
+  onUploadVideo,
+}: Props) {
   const picks = useMemo(() => TEMPLATES, []);
   const { width } = useWindowDimensions();
   const numCols = width >= 720 ? 4 : width >= 480 ? 3 : 2;
@@ -103,6 +108,17 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
             onPress={pickFromLibrary}
           >
             <Text style={styles.uploadLinkText}>or upload from library</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.uploadLink,
+              pressed && { opacity: 0.6 },
+            ]}
+            onPress={onUploadVideo}
+          >
+            <Text style={styles.uploadLinkText}>
+              Already have a video? Convert it to a GIF →
+            </Text>
           </Pressable>
         </View>
       </View>

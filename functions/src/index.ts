@@ -183,13 +183,17 @@ async function fetchToBuffer(url: string, maxBytes: number): Promise<Buffer> {
 }
 
 /**
- * Standalone test endpoint: convert an arbitrary MP4 URL to a GIF.
- * Useful for verifying the conversion pipeline without burning fal.ai credit.
+ * Convert an arbitrary video to a GIF.
  *
- * The URL must be publicly reachable HTTPS. The function intentionally does
- * not accept data URLs to keep the request payload small (the GIF is what
- * we're returning in base64).
+ * Accepts either a public HTTPS URL (used by the AI flow + tests, where the
+ * video already lives on a CDN) OR a `data:video/...;base64,...` data URL
+ * (used by the user-upload flow, where the client posts the bytes inline).
+ *
+ * Inline data URLs are capped well below the 10 MB Cloud Functions callable
+ * request limit; users with longer clips are told to trim or transcode.
  */
+const MAX_DATA_URL_BYTES = 8 * 1024 * 1024; // raw decoded; callable req cap is 10 MB
+
 export const convertVideoToGif = onCall(
   {
     enforceAppCheck: false,
@@ -200,17 +204,42 @@ export const convertVideoToGif = onCall(
     request
   ): Promise<{ gifDataUrl: string; sizeBytes: number }> => {
     const { videoUrl } = (request.data ?? {}) as { videoUrl?: string };
-    if (
-      typeof videoUrl !== "string" ||
-      !/^https:\/\//.test(videoUrl) ||
-      videoUrl.length > 2000
-    ) {
+    if (typeof videoUrl !== "string" || videoUrl.length === 0) {
       throw new HttpsError(
         "invalid-argument",
-        "`videoUrl` must be a non-empty HTTPS URL under 2000 chars."
+        "`videoUrl` must be a non-empty HTTPS or data: URL."
       );
     }
-    const mp4 = await fetchToBuffer(videoUrl, MAX_MP4_BYTES);
+
+    let mp4: Buffer;
+    if (videoUrl.startsWith("data:")) {
+      const comma = videoUrl.indexOf(",");
+      const meta = comma === -1 ? "" : videoUrl.slice(0, comma);
+      if (comma === -1 || !meta.includes(";base64")) {
+        throw new HttpsError(
+          "invalid-argument",
+          "`videoUrl` data URL must be base64-encoded (e.g. `data:video/mp4;base64,...`)."
+        );
+      }
+      mp4 = Buffer.from(videoUrl.slice(comma + 1), "base64");
+      if (mp4.byteLength === 0) {
+        throw new HttpsError("invalid-argument", "`videoUrl` decoded to 0 bytes.");
+      }
+      if (mp4.byteLength > MAX_DATA_URL_BYTES) {
+        throw new HttpsError(
+          "resource-exhausted",
+          `Inline video is ${mp4.byteLength} bytes; max ${MAX_DATA_URL_BYTES} (~8 MB). Trim the clip or shrink it before uploading.`
+        );
+      }
+    } else if (/^https:\/\//.test(videoUrl) && videoUrl.length <= 2000) {
+      mp4 = await fetchToBuffer(videoUrl, MAX_MP4_BYTES);
+    } else {
+      throw new HttpsError(
+        "invalid-argument",
+        "`videoUrl` must be either an HTTPS URL (≤2000 chars) or a `data:video/...;base64,...` data URL."
+      );
+    }
+
     const gif = await mp4BufferToGif(mp4);
     return {
       gifDataUrl: `data:image/gif;base64,${gif.toString("base64")}`,

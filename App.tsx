@@ -6,13 +6,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { CameraScreen } from "./src/screens/CameraScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
+import { VideoToGifScreen } from "./src/screens/VideoToGifScreen";
 import { type MemeTemplate } from "./src/lib/templates";
 import { colors } from "./src/theme";
 
 type Route =
   | { name: "home" }
   | { name: "camera"; templates: MemeTemplate[] }
-  | { name: "results"; selfieUri: string; templates: MemeTemplate[] };
+  | { name: "results"; selfieUri: string; templates: MemeTemplate[] }
+  | { name: "videoToGif" };
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: "home" });
@@ -27,7 +29,11 @@ export default function App() {
             onPickedFromLibrary={(uri, templates) =>
               setRoute({ name: "results", selfieUri: uri, templates })
             }
+            onUploadVideo={() => setRoute({ name: "videoToGif" })}
           />
+        )}
+        {route.name === "videoToGif" && (
+          <VideoToGifScreen onBack={() => setRoute({ name: "home" })} />
         )}
         {route.name === "camera" && (
           <CameraScreen

@@ -64,3 +64,22 @@ export async function callGenerateMemeVideo(input: {
   const res = await fn(input);
   return res.data;
 }
+
+/**
+ * Typed wrapper around the `convertVideoToGif` HTTPS callable. `videoUrl`
+ * may be either a public HTTPS URL or a `data:video/...;base64,...` data URL.
+ */
+export async function callConvertVideoToGif(input: {
+  videoUrl: string;
+}): Promise<{ gifDataUrl: string; sizeBytes: number }> {
+  const fn = httpsCallable<
+    { videoUrl: string },
+    { gifDataUrl: string; sizeBytes: number }
+  >(getFirebaseFunctions(), "convertVideoToGif", {
+    // ffmpeg + gifsicle on a 5-10s clip take ~13-30s wall time; give the
+    // client plenty of headroom over the server-side timeoutSeconds (120s).
+    timeout: 180_000,
+  });
+  const res = await fn(input);
+  return res.data;
+}
