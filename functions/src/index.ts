@@ -85,7 +85,10 @@ export const generateMemeVideo = onCall(
         `\`model\` "${model}" is not in the allowlist. Allowed: ${[...ALLOWED_MODELS].join(", ")}`
       );
     }
-    const dur = Number.isFinite(duration) ? Math.round(duration as number) : 5;
+    // Pika v2.2 (and the rest of our allowlist) only accepts 5s or 10s clips;
+    // clamp here so a malicious caller can't pass `duration: 1000` and rack up
+    // arbitrary cost (enforceAppCheck is off, so the function is publicly callable).
+    const dur = duration === 10 ? 10 : 5;
 
     fal.config({ credentials: FAL_KEY.value() });
 
