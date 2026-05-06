@@ -158,41 +158,45 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack}>
-          <Text style={styles.back}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>
-          {doneCount}/{rows.length} ready
-        </Text>
-        <View style={{ width: 40 }} />
+      <View style={styles.page}>
+        <View style={styles.header}>
+          <Pressable onPress={onBack}>
+            <Text style={styles.back}>← Back</Text>
+          </Pressable>
+          <Text style={styles.title}>
+            {doneCount}/{rows.length} ready
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <FlatList
+          data={rows}
+          keyExtractor={(r) => r.template.id}
+          numColumns={2}
+          columnWrapperStyle={{ gap: spacing.sm }}
+          contentContainerStyle={styles.grid}
+          renderItem={({ item }) => <ResultCell row={item} />}
+        />
       </View>
 
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => r.template.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: spacing.md }}
-        contentContainerStyle={styles.grid}
-        renderItem={({ item }) => <ResultCell row={item} />}
-      />
-
       <View style={styles.footer}>
-        <Pressable
-          onPress={saveAll}
-          disabled={savingAll || doneCount === 0}
-          style={({ pressed }) => [
-            styles.cta,
-            (pressed || savingAll) && { opacity: 0.85 },
-            doneCount === 0 && { opacity: 0.4 },
-          ]}
-        >
-          <Text style={styles.ctaText}>
-            {savingAll
-              ? "Saving…"
-              : `Save ${doneCount} video${doneCount === 1 ? "" : "s"} to Photos`}
-          </Text>
-        </Pressable>
+        <View style={styles.footerInner}>
+          <Pressable
+            onPress={saveAll}
+            disabled={savingAll || doneCount === 0}
+            style={({ pressed }) => [
+              styles.cta,
+              (pressed || savingAll) && { opacity: 0.85 },
+              doneCount === 0 && { opacity: 0.4 },
+            ]}
+          >
+            <Text style={styles.ctaText}>
+              {savingAll
+                ? "Saving…"
+                : `Save ${doneCount} video${doneCount === 1 ? "" : "s"} to Photos`}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -247,25 +251,24 @@ function ResultCell({ row }: { row: Row }) {
       <Text style={styles.cellTitle} numberOfLines={1}>
         {template.title}
       </Text>
-      <Text style={styles.cellCaption} numberOfLines={1}>
-        {template.caption}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1, backgroundColor: colors.bg, alignItems: "center" },
+  page: { width: "100%", maxWidth: 520, flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   back: { ...t.body, color: colors.accent },
-  title: { ...t.title, color: colors.text },
-  grid: { padding: spacing.lg, paddingBottom: 160, gap: spacing.md },
-  cell: { flex: 1, gap: spacing.xs, marginBottom: spacing.md },
+  title: { ...t.body, fontWeight: "700", color: colors.text },
+  grid: { paddingHorizontal: spacing.lg, paddingBottom: 140, gap: spacing.sm },
+  cell: { flex: 1, gap: spacing.xs, marginBottom: spacing.sm },
   cellImageWrap: {
     width: "100%",
     aspectRatio: 1,
@@ -287,21 +290,24 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
-  cellTitle: { ...t.body, color: colors.text },
-  cellCaption: { ...t.caption, color: colors.textMuted },
+  cellTitle: { fontSize: 13, fontWeight: "600", color: colors.text },
   footer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    padding: spacing.xl,
-    backgroundColor: colors.bg + "f0",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.bg + "ee",
+    alignItems: "center",
   },
+  footerInner: { width: "100%", maxWidth: 520 },
   cta: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     alignItems: "center",
   },
-  ctaText: { ...t.title, color: colors.bg },
+  ctaText: { fontSize: 17, fontWeight: "700", color: colors.bg },
 });
