@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GifMe",
+    "name": "GifMe AI",
     "slug": "gifme",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -11,13 +11,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0f"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gifme.app",
+      "bundleIdentifier": "com.gifmeapp.ios",
       "infoPlist": {
         "NSCameraUsageDescription": "GifMe needs camera access so you can snap a selfie to turn into GIFs.",
-        "NSPhotoLibraryUsageDescription": "GifMe saves your generated GIFs to your photo library.",
+        "NSPhotoLibraryUsageDescription": "GifMe reads photos from your library so you can pick a selfie to turn into GIFs, and saves generated GIFs back to your library.",
         "NSPhotoLibraryAddUsageDescription": "GifMe saves your generated GIFs to your photo library."
       }
     },
@@ -26,11 +28,16 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0f"
       },
-      "package": "com.gifme.app",
+      "package": "com.gifmeapp.android",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
       ]
     },
     "web": {
@@ -50,7 +57,19 @@
           "savePhotosPermission": "Allow GifMe to save GIFs to your photo library.",
           "isAccessMediaLocationEnabled": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GifMe to pick a selfie from your photo library."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9436b3e9-c070-48e1-831a-37c67c911fd2"
+      }
+    },
+    "owner": "settlematedev"
   }
 }

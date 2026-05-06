@@ -12,55 +12,58 @@ export type MemeTemplate = {
   previewUrl?: string;
 };
 
+// Live Giphy IDs verified to still serve real content (Giphy returns a
+// ~239KB "content not available" placeholder for dead IDs). If a URL ever
+// 404s, swap in a replacement here.
 export const TEMPLATES: MemeTemplate[] = [
   {
-    id: "dancing-baby",
-    title: "Dancing Baby",
+    id: "kimmy-say-what",
+    title: "Say What",
     gifUrl: "https://media.giphy.com/media/l0HlL2vlfpWI0meJi/giphy.gif",
   },
   {
-    id: "drake-hotline",
-    title: "Drake Hotline",
-    gifUrl: "https://media.giphy.com/media/3ohzAiaTQrKCRK3y6c/giphy.gif",
+    id: "office-party-hard",
+    title: "Party Hard",
+    gifUrl: "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
   },
   {
-    id: "this-is-fine",
-    title: "This is Fine",
-    gifUrl: "https://media.giphy.com/media/z3iVHI6pVRH7afEvy4/giphy.gif",
+    id: "sacha-thumbs-up",
+    title: "Thumbs Up",
+    gifUrl: "https://media.giphy.com/media/Od0QRnzwRBYmDU3eEO/giphy.gif",
   },
   {
-    id: "leo-cheers",
-    title: "Leo Cheers",
-    gifUrl: "https://media.giphy.com/media/3o6wrebs8nuGOMSmvS/giphy.gif",
+    id: "jim-carrey-omg",
+    title: "OMG",
+    gifUrl: "https://media.giphy.com/media/jquDWJfPUMCiI/giphy.gif",
   },
   {
-    id: "obama-mic-drop",
-    title: "Mic Drop",
+    id: "surprised-meme",
+    title: "Surprised",
+    gifUrl: "https://media.giphy.com/media/6nWhy3ulBL7GSCvKw6/giphy.gif",
+  },
+  {
+    id: "ping-pong-cat",
+    title: "Ping Pong Cat",
     gifUrl: "https://media.giphy.com/media/fvA1ieS8rEV8Y/giphy.gif",
   },
   {
-    id: "shaq-shimmy",
-    title: "Shaq Shimmy",
-    gifUrl: "https://media.giphy.com/media/26xBIygOcC3bAFQHe/giphy.gif",
+    id: "cute-cat",
+    title: "Cute Cat",
+    gifUrl: "https://media.giphy.com/media/H4DjXQXamtTiIuCcRU/giphy.gif",
   },
   {
-    id: "michael-scott-no",
-    title: "Michael Scott No",
-    gifUrl: "https://media.giphy.com/media/OPU6wzx8JrHna/giphy.gif",
+    id: "chat-conversation",
+    title: "Chat",
+    gifUrl: "https://media.giphy.com/media/26FPJGjhefSJuaRhu/giphy.gif",
   },
   {
-    id: "crying-jordan",
-    title: "Crying Jordan",
-    gifUrl: "https://media.giphy.com/media/xDQ3Oql1BN54VPxirV/giphy.gif",
+    id: "animation-smile",
+    title: "Smile",
+    gifUrl: "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
   },
   {
-    id: "homer-bush",
-    title: "Disappearing Homer",
-    gifUrl: "https://media.giphy.com/media/11IxTysmUVvwly/giphy.gif",
-  },
-  {
-    id: "pedro-ha",
-    title: "Pedro Ha",
-    gifUrl: "https://media.giphy.com/media/W04NQhvRlNcis/giphy.gif",
+    id: "south-park-numbers",
+    title: "Numbers Go Up",
+    gifUrl: "https://media.giphy.com/media/3o6Zt6fzS6qEbLhKWQ/giphy.gif",
   },
 ];

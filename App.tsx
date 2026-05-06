@@ -24,6 +24,9 @@ export default function App() {
         {route.name === "home" && (
           <HomeScreen
             onStart={(templates) => setRoute({ name: "camera", templates })}
+            onPickedFromLibrary={(uri, templates) =>
+              setRoute({ name: "results", selfieUri: uri, templates })
+            }
           />
         )}
         {route.name === "camera" && (
