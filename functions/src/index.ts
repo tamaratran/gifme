@@ -25,6 +25,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
 
+// `gifsicle` is an ESM package whose default export is the path to its
+// bundled binary (installed at npm-install time into vendor/gifsicle). We're
+// in CommonJS here, so resolve it lazily via dynamic import.
+let _gifsiclePathPromise: Promise<string> | null = null;
+function getGifsiclePath(): Promise<string> {
+  if (!_gifsiclePathPromise) {
+    _gifsiclePathPromise = import("gifsicle").then((mod) => mod.default);
+  }
+  return _gifsiclePathPromise;
+}
+
 // fal.ai API key, stored in Google Secret Manager.
 // Set once via: firebase functions:secrets:set FAL_KEY
 const FAL_KEY = defineSecret("FAL_KEY");
@@ -49,38 +60,49 @@ type FalVideoOutput = {
   video?: { url: string; content_type?: string };
 };
 
-// GIF tuning. 480p / 12fps with a two-pass palette is the sweet spot for
-// reaction memes — keeps file size around 1-3 MB for a 5s clip (well under
-// the 10 MB callable response cap) while staying readable.
-const GIF_FPS = 12;
-const GIF_WIDTH = 480;
+// GIF tuning. 360px / 10fps + gifsicle post-optimize lands around 2-4 MB for
+// a 5s clip (well under the 10 MB callable response cap) while staying crisp
+// enough for reaction memes. Two-pass palette + gifsicle `--optimize=3` does
+// most of the size win; reducing colours from 256 → 128 trims another ~30%
+// without visible quality loss on talking-head footage.
+const GIF_FPS = 10;
+const GIF_WIDTH = 360;
+const GIF_COLORS = 128;
 // Cap input MP4 size — fal.ai 720p 5s clips are ~1-3 MB, so 25 MB is safe
 // headroom for 10s clips and prevents a malicious URL pointing at a huge
 // download from blowing through memory + tmpfs.
 const MAX_MP4_BYTES = 25 * 1024 * 1024;
 
 /**
- * Run ffmpeg with the given args; resolve when it exits 0, reject otherwise.
+ * Run an external binary with args; resolve when it exits 0, reject otherwise.
+ * Capped stderr capture so a misbehaving child can't OOM the function.
  */
-function runFfmpeg(args: string[]): Promise<void> {
+function runBinary(bin: string, args: string[], label: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (!ffmpegPath) {
-      reject(new Error("ffmpeg-static did not provide a binary path"));
-      return;
-    }
-    const proc = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const proc = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
-      // Cap retained stderr to avoid blowing memory on a misbehaving binary.
       if (stderr.length > 8192) stderr = stderr.slice(-8192);
     });
     proc.on("error", (err) => reject(err));
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited ${code}: ${stderr.trim()}`));
+      else reject(new Error(`${label} exited ${code}: ${stderr.trim()}`));
     });
   });
+}
+
+function runFfmpeg(args: string[]): Promise<void> {
+  if (!ffmpegPath) {
+    return Promise.reject(new Error("ffmpeg-static did not provide a binary path"));
+  }
+  return runBinary(ffmpegPath, args, "ffmpeg");
+}
+
+async function runGifsicle(args: string[]): Promise<void> {
+  const bin = await getGifsiclePath();
+  return runBinary(bin, args, "gifsicle");
 }
 
 /**
@@ -91,6 +113,7 @@ async function mp4BufferToGif(mp4: Buffer): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), "gifme-"));
   const inPath = join(dir, "in.mp4");
   const palettePath = join(dir, "palette.png");
+  const rawGifPath = join(dir, "raw.gif");
   const outPath = join(dir, "out.gif");
   try {
     await writeFile(inPath, mp4);
@@ -101,7 +124,7 @@ async function mp4BufferToGif(mp4: Buffer): Promise<Buffer> {
       "-i",
       inPath,
       "-vf",
-      `${filter},palettegen=stats_mode=diff`,
+      `${filter},palettegen=stats_mode=diff:max_colors=${GIF_COLORS}`,
       palettePath,
     ]);
     // Pass 2: apply the palette with bayer dithering for smooth gradients.
@@ -113,7 +136,19 @@ async function mp4BufferToGif(mp4: Buffer): Promise<Buffer> {
       palettePath,
       "-lavfi",
       `${filter}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
+      rawGifPath,
+    ]);
+    // Pass 3: gifsicle post-optimize — frame de-duplication, lossy LZW, and
+    // a colour-table cap. Typically shaves another 30-50% off the file size
+    // with no perceptible quality drop on short reaction clips.
+    await runGifsicle([
+      "--optimize=3",
+      "--lossy=80",
+      `--colors=${GIF_COLORS}`,
+      "--no-warnings",
+      "-o",
       outPath,
+      rawGifPath,
     ]);
     return await readFile(outPath);
   } finally {
@@ -203,8 +238,9 @@ export const generateMemeVideo = onCall(
     url: string;
     contentType: string;
     model: string;
-    gifDataUrl: string;
-    gifSizeBytes: number;
+    gifDataUrl: string | null;
+    gifSizeBytes: number | null;
+    gifError: string | null;
   }> => {
     const {
       selfieDataUrl,
@@ -270,18 +306,33 @@ export const generateMemeVideo = onCall(
       );
     }
 
-    // Download the MP4 once, convert to GIF, and ship both back so the client
-    // can preview the GIF inline and offer "Save as GIF" without a second
-    // round-trip to fal.ai's CDN.
-    const mp4 = await fetchToBuffer(url, MAX_MP4_BYTES);
-    const gif = await mp4BufferToGif(mp4);
+    // Best-effort GIF conversion. The fal.ai charge has already been incurred
+    // by the time we get here, so a ffmpeg/gifsicle failure must NOT swallow
+    // the successfully-generated video URL — return it regardless and let the
+    // client fall back to the MP4. The client can also re-request a GIF later
+    // via the dedicated `convertVideoToGif` callable.
+    let gifDataUrl: string | null = null;
+    let gifSizeBytes: number | null = null;
+    let gifError: string | null = null;
+    try {
+      const mp4 = await fetchToBuffer(url, MAX_MP4_BYTES);
+      const gif = await mp4BufferToGif(mp4);
+      gifDataUrl = `data:image/gif;base64,${gif.toString("base64")}`;
+      gifSizeBytes = gif.byteLength;
+    } catch (err) {
+      gifError = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `mp4->gif conversion failed for ${model} (${url}): ${gifError}`
+      );
+    }
 
     return {
       url,
       contentType: data.video?.content_type ?? "video/mp4",
       model,
-      gifDataUrl: `data:image/gif;base64,${gif.toString("base64")}`,
-      gifSizeBytes: gif.byteLength,
+      gifDataUrl,
+      gifSizeBytes,
+      gifError,
     };
   }
 );
