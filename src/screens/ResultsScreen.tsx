@@ -9,12 +9,13 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import { VideoView, useVideoPlayer } from "expo-video";
 import * as MediaLibrary from "expo-media-library";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radii, spacing, type as t } from "../theme";
 import { type MemeTemplate } from "../lib/templates";
-import { swapFacesInGif } from "../lib/pipeline";
+import { generateMemeVideo, type PipelineProgress } from "../lib/pipeline";
 
 type Status =
   | { kind: "pending" }
@@ -33,6 +34,18 @@ type Props = {
   onBack: () => void;
 };
 
+const PHASE_LABEL: Record<PipelineProgress["phase"], string> = {
+  encode: "Preparing selfie",
+  generate: "Generating video",
+  download: "Downloading",
+  save: "Saving",
+};
+
+// fal.ai Pika v2.2 charges per request; cap concurrent jobs so we never
+// fan out 10 simultaneous requests (which would also overwhelm the function
+// instance pool). 3 in flight at once balances throughput and cost.
+const MAX_CONCURRENT_JOBS = 3;
+
 export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
   const [rows, setRows] = useState<Row[]>(
     templates.map((template) => ({ template, status: { kind: "pending" } }))
@@ -44,41 +57,74 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    // Run all face swaps in parallel. Each template's frame-level concurrency
-    // is already capped inside swapFacesInGif, so we don't need extra gating.
-    templates.forEach((template, idx) => {
-      const update = (patch: Status) =>
-        setRows((prev) =>
-          prev.map((r, i) => (i === idx ? { ...r, status: patch } : r))
-        );
+    let queueIdx = 0;
+    let inFlight = 0;
+    let cancelled = false;
 
-      update({ kind: "running", message: "Starting…", progress: 0 });
+    const update = (idx: number, patch: Status) =>
+      setRows((prev) =>
+        prev.map((r, i) => (i === idx ? { ...r, status: patch } : r))
+      );
 
-      swapFacesInGif(template.gifUrl, selfieUri, `gifme-${template.id}.gif`, {
-        concurrency: 4,
-        onProgress: (p) => {
-          const phaseLabel = {
-            fetch: "Downloading template",
-            decode: "Reading frames",
-            swap: `Swapping faces ${p.done}/${p.total}`,
-            encode: "Rendering GIF",
-            save: "Saving",
-          }[p.phase];
-          const ratio = p.total === 0 ? 0 : p.done / p.total;
-          update({ kind: "running", message: phaseLabel, progress: ratio });
-        },
-      })
-        .then((uri) => update({ kind: "done", uri }))
+    const runOne = (idx: number) => {
+      const template = templates[idx];
+      if (!template) return;
+      inFlight++;
+      update(idx, { kind: "running", message: "Starting…", progress: 0 });
+
+      generateMemeVideo(
+        selfieUri,
+        template.prompt,
+        template.duration,
+        `gifme-${template.id}.mp4`,
+        {
+          onProgress: (p) => {
+            const ratio = p.total === 0 ? 0 : p.done / p.total;
+            update(idx, {
+              kind: "running",
+              message: PHASE_LABEL[p.phase],
+              progress: ratio,
+            });
+          },
+        }
+      )
+        .then(({ uri }) => {
+          if (!cancelled) update(idx, { kind: "done", uri });
+        })
         .catch((e: unknown) => {
           const message = e instanceof Error ? e.message : String(e);
-          update({ kind: "error", message });
+          if (!cancelled) update(idx, { kind: "error", message });
+        })
+        .finally(() => {
+          inFlight--;
+          drain();
         });
-    });
+    };
+
+    const drain = () => {
+      // Bail if the screen has been unmounted — fal.ai requests are billed per
+      // clip ($0.20 each), so we must not start new ones after the user
+      // navigates away.
+      while (
+        !cancelled &&
+        inFlight < MAX_CONCURRENT_JOBS &&
+        queueIdx < templates.length
+      ) {
+        runOne(queueIdx++);
+      }
+    };
+
+    drain();
+
+    return () => {
+      cancelled = true;
+    };
   }, [templates, selfieUri]);
 
   async function saveAll() {
-    const ready = rows.filter((r): r is Row & { status: { kind: "done"; uri: string } } =>
-      r.status.kind === "done"
+    const ready = rows.filter(
+      (r): r is Row & { status: { kind: "done"; uri: string } } =>
+        r.status.kind === "done"
     );
     if (ready.length === 0) return;
 
@@ -86,7 +132,7 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     if (!perm.granted) {
       Alert.alert(
         "Photo library access needed",
-        "Enable access in Settings so GifMe can save your GIFs."
+        "Enable access in Settings so GifMe can save your videos."
       );
       return;
     }
@@ -96,7 +142,10 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
       for (const r of ready) {
         await MediaLibrary.saveToLibraryAsync(r.status.uri);
       }
-      Alert.alert("Saved", `${ready.length} GIF${ready.length === 1 ? "" : "s"} saved to Photos.`);
+      Alert.alert(
+        "Saved",
+        `${ready.length} video${ready.length === 1 ? "" : "s"} saved to Photos.`
+      );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       Alert.alert("Couldn't save", message);
@@ -109,39 +158,45 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack}>
-          <Text style={styles.back}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>
-          {doneCount}/{rows.length} ready
-        </Text>
-        <View style={{ width: 40 }} />
+      <View style={styles.page}>
+        <View style={styles.header}>
+          <Pressable onPress={onBack}>
+            <Text style={styles.back}>← Back</Text>
+          </Pressable>
+          <Text style={styles.title}>
+            {doneCount}/{rows.length} ready
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <FlatList
+          data={rows}
+          keyExtractor={(r) => r.template.id}
+          numColumns={2}
+          columnWrapperStyle={{ gap: spacing.sm }}
+          contentContainerStyle={styles.grid}
+          renderItem={({ item }) => <ResultCell row={item} />}
+        />
       </View>
 
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => r.template.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: spacing.md }}
-        contentContainerStyle={styles.grid}
-        renderItem={({ item }) => <ResultCell row={item} />}
-      />
-
       <View style={styles.footer}>
-        <Pressable
-          onPress={saveAll}
-          disabled={savingAll || doneCount === 0}
-          style={({ pressed }) => [
-            styles.cta,
-            (pressed || savingAll) && { opacity: 0.85 },
-            doneCount === 0 && { opacity: 0.4 },
-          ]}
-        >
-          <Text style={styles.ctaText}>
-            {savingAll ? "Saving…" : `Save ${doneCount} GIF${doneCount === 1 ? "" : "s"} to Photos`}
-          </Text>
-        </Pressable>
+        <View style={styles.footerInner}>
+          <Pressable
+            onPress={saveAll}
+            disabled={savingAll || doneCount === 0}
+            style={({ pressed }) => [
+              styles.cta,
+              (pressed || savingAll) && { opacity: 0.85 },
+              doneCount === 0 && { opacity: 0.4 },
+            ]}
+          >
+            <Text style={styles.ctaText}>
+              {savingAll
+                ? "Saving…"
+                : `Save ${doneCount} video${doneCount === 1 ? "" : "s"} to Photos`}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -149,19 +204,26 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
 
 function ResultCell({ row }: { row: Row }) {
   const { template, status } = row;
+  const videoUri = status.kind === "done" ? status.uri : null;
+  const player = useVideoPlayer(videoUri, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
 
   return (
     <View style={styles.cell}>
       <View style={styles.cellImageWrap}>
         {status.kind === "done" ? (
-          <Image
-            source={{ uri: status.uri }}
+          <VideoView
+            player={player}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            nativeControls={false}
           />
         ) : (
           <Image
-            source={{ uri: template.gifUrl }}
+            source={{ uri: template.thumbnailUrl }}
             style={[StyleSheet.absoluteFill, { opacity: 0.35 }]}
             contentFit="cover"
           />
@@ -174,7 +236,15 @@ function ResultCell({ row }: { row: Row }) {
         )}
         {status.kind === "error" && (
           <View style={styles.overlay}>
-            <Text style={[styles.overlayText, { color: colors.danger }]}>Failed</Text>
+            <Text style={[styles.overlayText, { color: colors.danger }]}>
+              Failed
+            </Text>
+            <Text
+              style={[styles.overlayText, styles.errorDetail]}
+              numberOfLines={3}
+            >
+              {status.message}
+            </Text>
           </View>
         )}
       </View>
@@ -186,17 +256,19 @@ function ResultCell({ row }: { row: Row }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1, backgroundColor: colors.bg, alignItems: "center" },
+  page: { width: "100%", maxWidth: 520, flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   back: { ...t.body, color: colors.accent },
-  title: { ...t.title, color: colors.text },
-  grid: { padding: spacing.lg, paddingBottom: 160, gap: spacing.md },
-  cell: { flex: 1, gap: spacing.sm, marginBottom: spacing.md },
+  title: { ...t.body, fontWeight: "700", color: colors.text },
+  grid: { paddingHorizontal: spacing.lg, paddingBottom: 140, gap: spacing.sm },
+  cell: { flex: 1, gap: spacing.xs, marginBottom: spacing.sm },
   cellImageWrap: {
     width: "100%",
     aspectRatio: 1,
@@ -213,20 +285,29 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   overlayText: { ...t.caption, color: colors.text, textAlign: "center" },
-  cellTitle: { ...t.caption, color: colors.textMuted },
+  errorDetail: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  cellTitle: { fontSize: 13, fontWeight: "600", color: colors.text },
   footer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    padding: spacing.xl,
-    backgroundColor: colors.bg + "f0",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.bg + "ee",
+    alignItems: "center",
   },
+  footerInner: { width: "100%", maxWidth: 520 },
   cta: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     alignItems: "center",
   },
-  ctaText: { ...t.title, color: colors.bg },
+  ctaText: { fontSize: 17, fontWeight: "700", color: colors.bg },
 });
