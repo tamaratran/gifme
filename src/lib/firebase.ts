@@ -35,9 +35,10 @@ export function getFirebaseApp(): FirebaseApp {
 
 export function getFirebaseFunctions(): Functions {
   if (functions) return functions;
-  // fal.ai i2v jobs typically take 30-90s; bump the client timeout to 4 min
-  // so the callable doesn't abort before the function returns. Functions-side
-  // timeoutSeconds is set to 300 in functions/src/index.ts.
+  // fal.ai i2v jobs typically take 30-90s; bump the client timeout to match
+  // the server-side `timeoutSeconds: 300` in functions/src/index.ts so the
+  // callable doesn't abort before the function returns (otherwise we get
+  // billed for the clip but never download it).
   functions = getFunctions(getFirebaseApp(), "us-central1");
   return functions;
 }
@@ -58,7 +59,7 @@ export async function callGenerateMemeVideo(input: {
     },
     { url: string; contentType: string; model: string }
   >(getFirebaseFunctions(), "generateMemeVideo", {
-    timeout: 240_000,
+    timeout: 300_000,
   });
   const res = await fn(input);
   return res.data;

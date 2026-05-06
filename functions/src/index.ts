@@ -21,9 +21,18 @@ const FAL_KEY = defineSecret("FAL_KEY");
 setGlobalOptions({ region: "us-central1", maxInstances: 20 });
 
 // Default model — Pika v2.2 image-to-video at 720p ($0.20 per 5s clip).
-// Overridable per-call via `request.data.model` so we can A/B Kling, Hailuo,
-// Wan, etc. without redeploying.
+// Overridable per-call via `request.data.model`, but ONLY for entries in
+// ALLOWED_MODELS — without an allowlist, any caller could proxy arbitrary
+// (and arbitrarily expensive) fal.ai endpoints through our key.
 const DEFAULT_MODEL = "fal-ai/pika/v2.2/image-to-video";
+const ALLOWED_MODELS: ReadonlySet<string> = new Set([
+  "fal-ai/pika/v2.2/image-to-video",
+  "fal-ai/kling-video/v2/master/image-to-video",
+  "fal-ai/kling-video/v2.1/standard/image-to-video",
+  "fal-ai/minimax/hailuo-02/standard/image-to-video",
+  "fal-ai/wan/v2.2/image-to-video",
+  "fal-ai/ltx-video/image-to-video",
+]);
 
 type FalVideoOutput = {
   video?: { url: string; content_type?: string };
@@ -70,6 +79,12 @@ export const generateMemeVideo = onCall(
     }
 
     const model = modelOverride ?? DEFAULT_MODEL;
+    if (!ALLOWED_MODELS.has(model)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `\`model\` "${model}" is not in the allowlist. Allowed: ${[...ALLOWED_MODELS].join(", ")}`
+      );
+    }
     const dur = Number.isFinite(duration) ? Math.round(duration as number) : 5;
 
     fal.config({ credentials: FAL_KEY.value() });
