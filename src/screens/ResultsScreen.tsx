@@ -315,7 +315,14 @@ const styles = StyleSheet.create({
   back: { ...t.body, color: colors.accent },
   title: { ...t.body, fontWeight: "700", color: colors.text },
   grid: { paddingHorizontal: spacing.lg, paddingBottom: 140, gap: spacing.sm },
-  cell: { flex: 1, gap: spacing.xs, marginBottom: spacing.sm },
+  // Fixed-percentage width (rather than `flex: 1`) so the last row of an odd
+  // count (e.g. 3 templates with numColumns=2) renders the lone cell at the
+  // same width as the others instead of stretching it across the full row.
+  cell: {
+    width: "48.5%",
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
   cellImageWrap: {
     width: "100%",
     aspectRatio: 1,
