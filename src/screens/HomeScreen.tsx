@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import {
   Alert,
   Pressable,
@@ -13,22 +12,29 @@ import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radii, spacing, type } from "../theme";
-import { TEMPLATES, type MemeTemplate } from "../lib/templates";
+import { EXAMPLE_GIFS } from "../lib/templates";
 
 type Props = {
-  onStart: (picked: MemeTemplate[]) => void;
-  onPickedFromLibrary: (uri: string, picked: MemeTemplate[]) => void;
+  /** Open the camera to take a fresh selfie. */
+  onTakeSelfie: () => void;
+  /** Selfie picked from the photo library — kicks off generation directly. */
+  onUploadSelfie: (uri: string) => void;
+  /** Open the standalone "convert your own video" flow. */
+  onUploadVideo: () => void;
 };
 
 const MAX_CONTENT_WIDTH = 520;
 
-export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
-  const picks = useMemo(() => TEMPLATES, []);
+export function HomeScreen({
+  onTakeSelfie,
+  onUploadSelfie,
+  onUploadVideo,
+}: Props) {
   const { width } = useWindowDimensions();
-  const numCols = width >= 720 ? 4 : width >= 480 ? 3 : 2;
+  const numCols = width >= 720 ? 3 : width >= 480 ? 3 : 2;
   const cellGap = spacing.sm;
 
-  async function pickFromLibrary() {
+  async function pickSelfieFromLibrary() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
@@ -43,7 +49,7 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
       quality: 0.85,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
-    onPickedFromLibrary(result.assets[0].uri, picks);
+    onUploadSelfie(result.assets[0].uri);
   }
 
   return (
@@ -52,13 +58,15 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
         <View style={styles.container}>
           <Text style={styles.brand}>GifMe AI</Text>
           <Text style={styles.tagline}>
-            Snap a selfie. AI animates you into 10 reaction memes.
+            Upload a selfie. AI animates you into reaction GIFs you can share.
           </Text>
 
+          <Text style={styles.sectionLabel}>What people are making</Text>
+
           <View style={[styles.grid, { gap: cellGap }]}>
-            {picks.map((t) => (
+            {EXAMPLE_GIFS.map((g) => (
               <View
-                key={t.id}
+                key={g.id}
                 style={[
                   styles.cell,
                   {
@@ -68,15 +76,12 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
               >
                 <View style={styles.thumbWrap}>
                   <Image
-                    source={{ uri: t.thumbnailUrl }}
+                    source={{ uri: g.url }}
                     style={StyleSheet.absoluteFill}
                     contentFit="cover"
                     transition={200}
+                    accessibilityLabel={g.alt}
                   />
-                  <View style={styles.thumbScrim} />
-                  <Text style={styles.thumbTitle} numberOfLines={1}>
-                    {t.title}
-                  </Text>
                 </View>
               </View>
             ))}
@@ -91,18 +96,29 @@ export function HomeScreen({ onStart, onPickedFromLibrary }: Props) {
               styles.cta,
               pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
             ]}
-            onPress={() => onStart(picks)}
+            onPress={pickSelfieFromLibrary}
           >
-            <Text style={styles.ctaText}>Snap a selfie</Text>
+            <Text style={styles.ctaText}>Upload a selfie</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [
               styles.uploadLink,
               pressed && { opacity: 0.6 },
             ]}
-            onPress={pickFromLibrary}
+            onPress={onTakeSelfie}
           >
-            <Text style={styles.uploadLinkText}>or upload from library</Text>
+            <Text style={styles.uploadLinkText}>or take a selfie instead</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.uploadLink,
+              pressed && { opacity: 0.6 },
+            ]}
+            onPress={onUploadVideo}
+          >
+            <Text style={styles.uploadLinkText}>
+              Already have a video? Convert it to a GIF →
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -115,7 +131,7 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: 140,
+    paddingBottom: 180,
     alignItems: "center",
   },
   container: {
@@ -135,6 +151,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
   },
+  sectionLabel: {
+    ...type.caption,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -148,19 +173,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.card,
     overflow: "hidden",
-    justifyContent: "flex-end",
-  },
-  thumbScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.0)",
-  },
-  thumbTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.text,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    backgroundColor: "rgba(0,0,0,0.55)",
   },
   footer: {
     position: "absolute",
