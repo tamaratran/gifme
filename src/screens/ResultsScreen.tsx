@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -121,21 +121,36 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
     };
   }, [templates, selfieUri]);
 
-  async function saveAll() {
-    const ready = rows.filter(
-      (r): r is Row & { status: { kind: "done"; uri: string } } =>
-        r.status.kind === "done"
-    );
-    if (ready.length === 0) return;
-
+  async function ensurePhotoPerm(): Promise<boolean> {
     const perm = await MediaLibrary.requestPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
         "Photo library access needed",
         "Enable access in Settings so GifMe can save your videos."
       );
-      return;
+      return false;
     }
+    return true;
+  }
+
+  const saveOne = useCallback(async (uri: string, title: string) => {
+    if (!(await ensurePhotoPerm())) return;
+    try {
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert("Saved", `\u201C${title}\u201D saved to Photos.`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      Alert.alert("Couldn't save", message);
+    }
+  }, []);
+
+  async function saveAll() {
+    const ready = rows.filter(
+      (r): r is Row & { status: { kind: "done"; uri: string } } =>
+        r.status.kind === "done"
+    );
+    if (ready.length === 0) return;
+    if (!(await ensurePhotoPerm())) return;
 
     setSavingAll(true);
     try {
@@ -155,6 +170,11 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
   }
 
   const doneCount = rows.filter((r) => r.status.kind === "done").length;
+  const totalCount = rows.length;
+  const allDone = doneCount === totalCount && totalCount > 0;
+  const headerStatus = allDone
+    ? "Tap your favorite to save"
+    : `${doneCount}/${totalCount} ready`;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -163,9 +183,7 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
           <Pressable onPress={onBack}>
             <Text style={styles.back}>← Back</Text>
           </Pressable>
-          <Text style={styles.title}>
-            {doneCount}/{rows.length} ready
-          </Text>
+          <Text style={styles.title}>{headerStatus}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -175,25 +193,32 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
           numColumns={2}
           columnWrapperStyle={{ gap: spacing.sm }}
           contentContainerStyle={styles.grid}
-          renderItem={({ item }) => <ResultCell row={item} />}
+          renderItem={({ item }) => (
+            <ResultCell row={item} onPick={saveOne} />
+          )}
         />
       </View>
 
       <View style={styles.footer}>
         <View style={styles.footerInner}>
+          <Text style={styles.footerHint}>
+            {doneCount === 0
+              ? "Hang tight — generating videos…"
+              : "Tap a video above to save it to Photos."}
+          </Text>
           <Pressable
             onPress={saveAll}
             disabled={savingAll || doneCount === 0}
             style={({ pressed }) => [
-              styles.cta,
-              (pressed || savingAll) && { opacity: 0.85 },
+              styles.saveAllLink,
+              (pressed || savingAll) && { opacity: 0.6 },
               doneCount === 0 && { opacity: 0.4 },
             ]}
           >
-            <Text style={styles.ctaText}>
+            <Text style={styles.saveAllLinkText}>
               {savingAll
                 ? "Saving…"
-                : `Save ${doneCount} video${doneCount === 1 ? "" : "s"} to Photos`}
+                : `or save all ${doneCount} to Photos`}
             </Text>
           </Pressable>
         </View>
@@ -202,7 +227,13 @@ export function ResultsScreen({ selfieUri, templates, onBack }: Props) {
   );
 }
 
-function ResultCell({ row }: { row: Row }) {
+function ResultCell({
+  row,
+  onPick,
+}: {
+  row: Row;
+  onPick: (uri: string, title: string) => void;
+}) {
   const { template, status } = row;
   const videoUri = status.kind === "done" ? status.uri : null;
   const player = useVideoPlayer(videoUri, (p) => {
@@ -211,8 +242,24 @@ function ResultCell({ row }: { row: Row }) {
     p.play();
   });
 
+  const onPress =
+    status.kind === "done"
+      ? () => onPick(status.uri, template.title)
+      : undefined;
+
   return (
-    <View style={styles.cell}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.cell,
+        onPress && pressed ? { opacity: 0.85 } : null,
+      ]}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={
+        onPress ? `Save ${template.title} to Photos` : undefined
+      }
+    >
       <View style={styles.cellImageWrap}>
         {status.kind === "done" ? (
           <VideoView
@@ -251,7 +298,7 @@ function ResultCell({ row }: { row: Row }) {
       <Text style={styles.cellTitle} numberOfLines={1}>
         {template.title}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -302,12 +349,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg + "ee",
     alignItems: "center",
   },
-  footerInner: { width: "100%", maxWidth: 520 },
-  cta: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+  footerInner: { width: "100%", maxWidth: 520, alignItems: "center" },
+  footerHint: {
+    ...t.caption,
+    fontSize: 13,
+    color: colors.text,
+    textAlign: "center",
   },
-  ctaText: { fontSize: 17, fontWeight: "700", color: colors.bg },
+  saveAllLink: {
+    alignSelf: "center",
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  saveAllLinkText: {
+    ...t.caption,
+    fontSize: 13,
+    color: colors.textMuted,
+    textDecorationLine: "underline",
+  },
 });

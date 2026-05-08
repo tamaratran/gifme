@@ -7,13 +7,13 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { CameraScreen } from "./src/screens/CameraScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
 import { VideoToGifScreen } from "./src/screens/VideoToGifScreen";
-import { type MemeTemplate } from "./src/lib/templates";
+import { DEFAULT_PROMPT_SUBSET } from "./src/lib/templates";
 import { colors } from "./src/theme";
 
 type Route =
   | { name: "home" }
-  | { name: "camera"; templates: MemeTemplate[] }
-  | { name: "results"; selfieUri: string; templates: MemeTemplate[] }
+  | { name: "camera" }
+  | { name: "results"; selfieUri: string }
   | { name: "videoToGif" };
 
 export default function App() {
@@ -25,9 +25,9 @@ export default function App() {
         <StatusBar style="light" />
         {route.name === "home" && (
           <HomeScreen
-            onStart={(templates) => setRoute({ name: "camera", templates })}
-            onPickedFromLibrary={(uri, templates) =>
-              setRoute({ name: "results", selfieUri: uri, templates })
+            onTakeSelfie={() => setRoute({ name: "camera" })}
+            onUploadSelfie={(uri) =>
+              setRoute({ name: "results", selfieUri: uri })
             }
             onUploadVideo={() => setRoute({ name: "videoToGif" })}
           />
@@ -38,11 +38,7 @@ export default function App() {
         {route.name === "camera" && (
           <CameraScreen
             onCaptured={(uri) =>
-              setRoute({
-                name: "results",
-                selfieUri: uri,
-                templates: route.templates,
-              })
+              setRoute({ name: "results", selfieUri: uri })
             }
             onCancel={() => setRoute({ name: "home" })}
           />
@@ -50,7 +46,7 @@ export default function App() {
         {route.name === "results" && (
           <ResultsScreen
             selfieUri={route.selfieUri}
-            templates={route.templates}
+            templates={DEFAULT_PROMPT_SUBSET}
             onBack={() => setRoute({ name: "home" })}
           />
         )}

@@ -1,10 +1,12 @@
 /**
  * Curated list of meme reaction prompts. Each template animates the user's
  * selfie into a 5-second video via fal.ai image-to-video. The thumbnail GIF
- * shown in the home grid is just a hint at the vibe — the actual generated
- * clip will be the user's own face acting it out.
+ * shown in the (post-upload) results grid is just a hint at the vibe — the
+ * actual generated clip will be the user's own face acting it out.
  *
- * Keep this list editable — the home screen renders whatever is here.
+ * The home screen no longer lets the user pre-pick a template; instead the
+ * upload-a-selfie flow runs `DEFAULT_PROMPT_SUBSET` in parallel and lets the
+ * user pick a favourite from the generated grid.
  */
 export type MemeTemplate = {
   id: string;
@@ -112,5 +114,64 @@ export const TEMPLATES: MemeTemplate[] = [
     prompt:
       "the person stares straight ahead in awe, mouth slowly drops open, head leans back as if their mind is blown",
     duration: 5,
+  },
+];
+
+/**
+ * The subset of prompts that runs in parallel after the user uploads a selfie.
+ * Each prompt costs ~$0.20 on fal.ai Pika v2.2, so we keep this small by
+ * default; pick a varied trio that reads as different "moods" so the picker
+ * grid feels meaningful.
+ */
+export const DEFAULT_PROMPT_SUBSET: MemeTemplate[] = TEMPLATES.filter((t) =>
+  ["big-smile", "mind-blown", "party-hard"].includes(t.id)
+);
+
+/**
+ * Looping reaction GIFs of random people, used as inspiration on the home
+ * screen. Not selectable — they just communicate the vibe of what the app
+ * outputs and provide social-proof-style movement on an otherwise static page.
+ *
+ * Keep this list small (≤8) and the GIFs reasonably small (<2 MB each) so the
+ * home screen loads fast on mobile data.
+ */
+export type ExampleGif = {
+  id: string;
+  /** Animated GIF URL (Giphy CDN). */
+  url: string;
+  /** Short alt-text / caption for accessibility. */
+  alt: string;
+};
+
+export const EXAMPLE_GIFS: ExampleGif[] = [
+  {
+    id: "fist-pump",
+    url: "https://media.giphy.com/media/aHOU7Pg8VRpifMNOv2/giphy.gif",
+    alt: "Person celebrating with a fist pump",
+  },
+  {
+    id: "house-party",
+    url: "https://media.giphy.com/media/jxupZeSuPc1ABKgkxR/giphy.gif",
+    alt: "Person dancing at a house party",
+  },
+  {
+    id: "happy-laugh",
+    url: "https://media.giphy.com/media/VjqNtkg7kSZGM/giphy.gif",
+    alt: "Person laughing happily",
+  },
+  {
+    id: "excited-laugh",
+    url: "https://media.giphy.com/media/l0HUcfpjmD77zuSze/giphy.gif",
+    alt: "Person laughing excitedly",
+  },
+  {
+    id: "excited-fist-pump",
+    url: "https://media.giphy.com/media/10xMuDFatcaZhu/giphy.gif",
+    alt: "Person fist-pumping with excitement",
+  },
+  {
+    id: "joyful-laugh",
+    url: "https://media.giphy.com/media/eSbLmEEG80WQDIHmJl/giphy.gif",
+    alt: "Person laughing joyfully",
   },
 ];
