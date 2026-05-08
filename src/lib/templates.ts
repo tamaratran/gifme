@@ -150,9 +150,9 @@ export const EXAMPLE_GIFS: ExampleGif[] = [
     alt: "Person celebrating with a fist pump",
   },
   {
-    id: "house-party",
-    url: "https://media.giphy.com/media/jxupZeSuPc1ABKgkxR/giphy.gif",
-    alt: "Person dancing at a house party",
+    id: "mind-blown",
+    url: "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
+    alt: "Person reacting with mind blown",
   },
   {
     id: "happy-laugh",
