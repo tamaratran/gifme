@@ -25,8 +25,6 @@ import { EXAMPLE_GIFS } from "../lib/templates";
 const MIN_TILE_PX = 80;
 
 type Props = {
-  /** Open the camera to take a fresh selfie. */
-  onTakeSelfie: () => void;
   /** Selfie picked from the photo library — kicks off generation directly. */
   onUploadSelfie: (uri: string) => void;
   /** Open the standalone "convert your own video" flow. */
@@ -35,11 +33,7 @@ type Props = {
 
 const MAX_CONTENT_WIDTH = 520;
 
-export function HomeScreen({
-  onTakeSelfie,
-  onUploadSelfie,
-  onUploadVideo,
-}: Props) {
+export function HomeScreen({ onUploadSelfie, onUploadVideo }: Props) {
   const { width } = useWindowDimensions();
   const numCols = width >= 720 ? 3 : width >= 480 ? 3 : 2;
   const cellGap = spacing.sm;
@@ -137,15 +131,6 @@ export function HomeScreen({
               styles.uploadLink,
               pressed && { opacity: 0.6 },
             ]}
-            onPress={onTakeSelfie}
-          >
-            <Text style={styles.uploadLinkText}>or take a selfie instead</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.uploadLink,
-              pressed && { opacity: 0.6 },
-            ]}
             onPress={onUploadVideo}
           >
             <Text style={styles.uploadLinkText}>
@@ -162,39 +147,47 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 180,
+    paddingTop: spacing.xl,
+    paddingBottom: 160,
     alignItems: "center",
   },
   container: {
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
+    alignItems: "center",
   },
   brand: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "800",
     letterSpacing: -0.5,
     color: colors.text,
+    textAlign: "center",
   },
   tagline: {
     ...type.caption,
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textMuted,
-    marginTop: spacing.xs,
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xl,
+    textAlign: "center",
+    maxWidth: 360,
   },
   sectionLabel: {
     ...type.caption,
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     color: colors.textMuted,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    textAlign: "center",
+    alignSelf: "stretch",
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    justifyContent: "center",
+    alignSelf: "stretch",
   },
   cell: {
     aspectRatio: 1,
@@ -220,17 +213,19 @@ const styles = StyleSheet.create({
   footerInner: {
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
+    alignItems: "center",
   },
   cta: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
     paddingVertical: spacing.md,
     alignItems: "center",
+    alignSelf: "stretch",
   },
   ctaText: { fontSize: 17, fontWeight: "700", color: colors.bg },
   uploadLink: {
     alignSelf: "center",
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     paddingVertical: spacing.xs,
   },
   uploadLinkText: {
@@ -238,5 +233,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     textDecorationLine: "underline",
+    textAlign: "center",
   },
 });
