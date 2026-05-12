@@ -132,13 +132,21 @@ export const DEFAULT_PROMPT_SUBSET: MemeTemplate[] = TEMPLATES.filter((t) =>
  * screen. Not selectable — they just communicate the vibe of what the app
  * outputs and provide social-proof-style movement on an otherwise static page.
  *
+ * Sources are bundled as static assets (shipped with the app / web bundle) so
+ * we never depend on a third-party CDN at runtime. A previous version pointed
+ * at the Giphy CDN, and one tile silently rendered Giphy's "THIS CONTENT IS
+ * NOT AVAILABLE" placeholder once the upstream media was unpublished.
+ *
  * Keep this list small (≤8) and the GIFs reasonably small (<2 MB each) so the
  * home screen loads fast on mobile data.
  */
 export type ExampleGif = {
   id: string;
-  /** Animated GIF URL (Giphy CDN). */
-  url: string;
+  /**
+   * Local asset reference, passed to `require()` at module load time so Metro
+   * (native) / webpack (web) bundles the file alongside the JS.
+   */
+  source: number;
   /** Short alt-text / caption for accessibility. */
   alt: string;
 };
@@ -146,32 +154,32 @@ export type ExampleGif = {
 export const EXAMPLE_GIFS: ExampleGif[] = [
   {
     id: "fist-pump",
-    url: "https://media.giphy.com/media/aHOU7Pg8VRpifMNOv2/giphy.gif",
+    source: require("../../assets/example-gifs/fist-pump.gif"),
     alt: "Person celebrating with a fist pump",
   },
   {
     id: "mind-blown",
-    url: "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
+    source: require("../../assets/example-gifs/mind-blown.gif"),
     alt: "Person reacting with mind blown",
   },
   {
     id: "happy-laugh",
-    url: "https://media.giphy.com/media/VjqNtkg7kSZGM/giphy.gif",
+    source: require("../../assets/example-gifs/happy-laugh.gif"),
     alt: "Person laughing happily",
   },
   {
     id: "excited-laugh",
-    url: "https://media.giphy.com/media/l0HUcfpjmD77zuSze/giphy.gif",
+    source: require("../../assets/example-gifs/excited-laugh.gif"),
     alt: "Person laughing excitedly",
   },
   {
     id: "excited-fist-pump",
-    url: "https://media.giphy.com/media/10xMuDFatcaZhu/giphy.gif",
+    source: require("../../assets/example-gifs/excited-fist-pump.gif"),
     alt: "Person fist-pumping with excitement",
   },
   {
     id: "joyful-laugh",
-    url: "https://media.giphy.com/media/eSbLmEEG80WQDIHmJl/giphy.gif",
+    source: require("../../assets/example-gifs/joyful-laugh.gif"),
     alt: "Person laughing joyfully",
   },
 ];
