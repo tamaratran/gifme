@@ -4,7 +4,6 @@ import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { HomeScreen } from "./src/screens/HomeScreen";
-import { CameraScreen } from "./src/screens/CameraScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
 import { VideoToGifScreen } from "./src/screens/VideoToGifScreen";
 import { DEFAULT_PROMPT_SUBSET } from "./src/lib/templates";
@@ -12,7 +11,6 @@ import { colors } from "./src/theme";
 
 type Route =
   | { name: "home" }
-  | { name: "camera" }
   | { name: "results"; selfieUri: string }
   | { name: "videoToGif" };
 
@@ -25,7 +23,6 @@ export default function App() {
         <StatusBar style="light" />
         {route.name === "home" && (
           <HomeScreen
-            onTakeSelfie={() => setRoute({ name: "camera" })}
             onUploadSelfie={(uri) =>
               setRoute({ name: "results", selfieUri: uri })
             }
@@ -34,14 +31,6 @@ export default function App() {
         )}
         {route.name === "videoToGif" && (
           <VideoToGifScreen onBack={() => setRoute({ name: "home" })} />
-        )}
-        {route.name === "camera" && (
-          <CameraScreen
-            onCaptured={(uri) =>
-              setRoute({ name: "results", selfieUri: uri })
-            }
-            onCancel={() => setRoute({ name: "home" })}
-          />
         )}
         {route.name === "results" && (
           <ResultsScreen
